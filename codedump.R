@@ -1,20 +1,29 @@
 workiviaScraper <- function() {
-  library(tidyverse)
-  library(rvest)
+  
+  #Function that runs both scraping functions and combines output.  
+  
+  packages <- c("tidyverse", "stringr", "rvest", "stringr")
+  lapply(packages, library, character.only = TRUE)
   
   #read main page HTML
   base_html <- read_html("https://www.workiva.com/customers?solution=All&industry=All&show_all=all")
   
+  #scrape by the Solution dropdown and scrape by the links to the client pages
   solutions_df1 <- scrape_by_Solution_Page(base_html)
   solutions_df2 <- scrape_by_Customer_Page(base_html)
+  
+  #combine output - reorder columns - remove customers that have "No Solution" on one page not another
   output_df <- rbind(solutions_df1, solutions_df2)
   output_df <- output_df[,c(3,1,2)]
   output_df <- output_df %>% filter(!(duplicated(customers) & solution == "No Solution"))
   return(output_df)
-}
 
-#scrape function to go by solution dropdown
+  }
+
+
 scrape_by_Solution_Page <- function(base_html) {
+  
+  #Function to iterate through the solution specific pages
   
   # get the solutions from the drop down as a vector
   solutions <- base_html %>% 
@@ -68,6 +77,8 @@ scrape_by_Solution_Page <- function(base_html) {
 #scrape function to go by each customer link
 scrape_by_Customer_Page <- function(base_html){
   
+  #Function to iterate through the customer specific pages
+  
   companies <- base_html %>% html_nodes('.field-content img') %>% #pull imgs
     html_attr("src") %>%  #pull src values for img
     gsub("?(f|ht)tp(s?)://d1cctnxxgpcdci.cloudfront.net/sites/workiva/files/|\\.svg|images/logos/|%281%29|d%E2%80%99alene|-logo", "", .) %>% #remove leading/trailing text
@@ -76,101 +87,117 @@ scrape_by_Customer_Page <- function(base_html){
     gsub(" 0", "", .) #remove extra 0
   
   #extract company links from each panel's href
-  extractHTMLAttrNA <- function(x) {
-    x %>% html_nodes('a') %>% html_attr("href") %>% ifelse(identical(.,character(0)), "NA", .) -> companylink
-    return(companylink)
+  extract_HTML_Attr_NA <- function(x) {
+    x %>% html_nodes('a') %>% html_attr("href") %>% ifelse(identical(.,character(0)), "NA", .) -> company_link
+    return(company_link)
   }
   
   #return company's link text to add to base link
-  companylinks <- base_html %>% html_nodes('.views-field.views-field-field-logo .field-content') %>% sapply(.,extractHTMLAttrNA)
+  company_links <- base_html %>% html_nodes('.views-field.views-field-field-logo .field-content') %>% sapply(.,extract_HTML_Attr_NA)
   
   #create temp company + link dataframe for lookup in helper function
-  companydf <- data.frame(companies, companylinks, stringsAsFactors = FALSE)
+  company_df <- data.frame(companies, company_links, stringsAsFactors = FALSE)
   
   #iterate company links and return solutions for each company as dataframe
-  extractSolutions <- function(company) {
-    link <- companydf$companylinks[companydf$companies == company] #get company full name for link provided
+  extract_Solutions <- function(company) {
+    link <- company_df$companylinks[company_df$companies == company] #get company full name for link provided
     
     #no solutions for NA links
     if(link == "NA") {
       return(data.frame(customers = company,companylinks = link, solution = "No Solution", stringsAsFactors = FALSE))
     }
     else{
-      companypage <- read_html(paste0("https://www.workiva.com",link)) #read company page
-      companysolutions <- companypage %>% html_nodes('div.pull-left.d-inline-block.padding-right-30.field.field-name-field-solutions-reference.field-type-entityreference.field-label-above a') %>%
+      company_page <- read_html(paste0("https://www.workiva.com",link)) #read company page
+      company_solutions <- company_page %>% html_nodes('div.pull-left.d-inline-block.padding-right-30.field.field-name-field-solutions-reference.field-type-entityreference.field-label-above a') %>%
         html_attr('href') %>%  gsub("/solutions/", "", .) %>% #remove leading/trailing text
         gsub("-|%20%|_", " ",.) %>% #add spaces
         gsub("(^|[[:space:]])([[:alpha:]])", "\\1\\U\\2", ., perl=TRUE) #capitalize first letters
-      return(data.frame(customers = rep(company,length(companysolutions)),companylinks = rep(link,length(companysolutions)), solution = companysolutions, stringsAsFactors = FALSE))
+      return(data.frame(customers = rep(company,length(company_solutions)),companylinks = rep(link,length(company_solutions)), solution = company_solutions, stringsAsFactors = FALSE))
     }
     
   }
   
-  finaldf <- lapply(companydf$companies, extractSolutions) %>% do.call(rbind,.)
-  finaldf$pulldate <- Sys.Date()
-  return(finaldf[,-2])
+  final_df <- lapply(company_df$companies, extract_Solutions) %>% do.call(rbind,.)
+  final_df$pulldate <- Sys.Date()
+  return(final_df[,-2])
 }
 
-#write to Excel
-workiviaWriter <- function(workdf) {
+
+workivia_Writer <- function(work_df,updates_df) {
+  
+  #Function to write to formatted Excel file
+  
   #install.packages('xlsx') requires xlsx package install
   library(xlsx)
-  
   
   #create Excel file 
   wb <- createWorkbook()
   sheet <- createSheet(wb, sheetName="Workivia Solutions")
-  sheet2 <- createSheet(wb, sheetName="Workivia Changes")
+  sheet_2 <- createSheet(wb, sheetName="Workivia Changes")
   
   #create cell styles for headers
-  csheader <- CellStyle(wb) + Font(wb, isBold=TRUE) + Border() # header
+  cs_header <- CellStyle(wb) + Font(wb, isBold=TRUE) + Border() # header
   
-  #writeSolutions table
-  addDataFrame(workdf, sheet, startRow=1, startColumn=1, colnamesStyle=csheader,
+  #write Solutions table
+  addDataFrame(work_df, sheet, startRow=1, startColumn=1, colnamesStyle=cs_header,
                row.names = FALSE)
-  #write raw data to check for updates when running weekly
-  #addDataFrame(workdf, sheet2, startRow=1, startColumn=1, colnamesStyle=csheader,
-               #row.names = FALSE)
+  
+  #write update data
+  addDataFrame(updates_df, sheet2, startRow=1, startColumn=1, colnamesStyle=csheader,
+                row.names = FALSE)
   saveWorkbook(wb, "WorkiviaSolutions.xlsx")
 }
 
-#check for updates and send e-mail if new customers
-checkforUpdates <- function() {
-  library(mailR)
+
+check_for_Updates <- function() {
   
-  currentdata <- testcompare %>% mutate(customersolution = paste0(customers,"|",solution))
-  priordata <- testcompare2 %>% mutate(customersolution = paste0(customers,"|",solution))
- 
-  #currentdata <- workiviaScraper()#get today's data
-  #priordata <- read.xlsx2("WorkiviaSolutions.xlsx", 1, colClasses = c('Date', 'character', 'character'),stringsAsFactors=FALSE) #get historical data
-  combineddata <- rbind(currentdata[,-4], priordata[,-4]) #combine dfs to append to file
-  new_customers <- currentdata %>% filter(!(customers %in% priordata$customers)) %>% mutate(update = "New Customer")
-  removed_customers <- priordata %>% filter(!(customers %in% currentdata$customers)) %>% mutate(update = "Removed Customer")
-  new_solutions <- currentdata %>% filter((customers %in% priordata$customers),!(customersolution %in% priordata$customersolution)) %>% mutate(update = "New Solution")
-  removed_solution <- priordata %>% filter((customers %in% currentdata$customers),!(customersolution %in% currentdata$customersolution)) %>% mutate(update = "Removed Customer")
+  #Function to check for updates and send e-mail if new customers
+  
+  library(mailR) #required package for sending mail
+  
+  
+  current_data <- testcompare %>% mutate(customersolution = paste0(customers,"|",solution))
+  prior_data <- testcompare2 %>% mutate(customersolution = paste0(customers,"|",solution))
+  
+  #get today's data and prior scraped data then add comparison column
+  #currentdata <- workiviaScraper() %>% 
+                #mutate(customersolution = paste0(customers,"|",solution)) 
+  #priordata <- read.xlsx2("WorkiviaSolutions.xlsx", 1, colClasses = c('Date', 'character', 'character'),stringsAsFactors=FALSE) %>% 
+                #mutate(customersolution = paste0(customers,"|",solution))
+  
+  combined_data <- rbind(current_data[,-4], prior_data[,-4]) #combine dfs to append to file
+  
+  #Compare data and extract differences into categories
+  new_customers <- current_data %>% filter(!(customers %in% prior_data$customers)) %>% 
+                                    mutate(update = "New Customer")
+  removed_customers <- prior_data %>% filter(!(customers %in% current_data$customers)) %>% 
+                                    mutate(update = "Removed Customer")
+  new_solutions <- current_data %>% filter((customers %in% prior_data$customers),!(customersolution %in% prior_data$customersolution)) %>% 
+                                    mutate(update = "New Solution")
+  removed_solution <- prior_data %>% filter((customers %in% current_data$customers),!(customersolution %in% current_data$customersolution)) %>% 
+                                    mutate(update = "Removed Customer")
   
   updates_df <- rbind(new_customers[,-4],removed_customers[,-4], new_solutions[,-4], removed_solution[,-4])
   return(updates_df)
   #check for new Company Names or more/less Solutions
-  # if(){
-  #   return("No update needed")
-  # }
-  # else {
-    #send e-mail - **user.name and passwd must be filled out**
-    # send.mail(from = "",
-    #           to = c(""),
-    #           subject = paste0("Workivia Solutions Update: ", as.character(Sys.Date())),
-    #           body = "<html>There have been updates to the Company Solution list on <a href =\"https://www.workiva.com/customers?solution=All&industry=All&show_all=all\">Workivia.com.</a></html>",
-    #           html = TRUE,
-    #           smtp = list(host.name = "smtp.gmail.com", port = 465, user.name = "", passwd = "", ssl = TRUE),
-    #           attach.files = c("WorkiviaSolutions.xlsx"),
-    #           authenticate = TRUE,
-    #           send = TRUE)
-    # workiviaWriter(combineddata)
-  #   return("File updated")
-  # }
-  
+   if(nrow(updates_df) == 0){
+     return("No update needed")
+   }
+   else {
+  #send e-mail - **user.name and passwd must be filled out**
+   send.mail(from = "",
+             to = c(""),
+             subject = paste0("Workivia Solutions Update: ", as.character(Sys.Date())),
+             body = "<html>There have been updates to the Company Solution list on <a href =\"https://www.workiva.com/customers?solution=All&industry=All&show_all=all\">Workivia.com.</a></html>",
+             html = TRUE,
+             smtp = list(host.name = "smtp.gmail.com", port = 465, user.name = "", passwd = "", ssl = TRUE),
+             attach.files = c("WorkiviaSolutions.xlsx"),
+             authenticate = TRUE,
+             send = TRUE)
+   workiviaWriter(combined_data, updates_df)
+     return("File updated")
+   }
+
 }
 
 #checkforUpdates()
-
