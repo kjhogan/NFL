@@ -59,3 +59,40 @@ bb2 %>% unnest_tokens(sentence, quotes, token = "sentences") %>%
 bb2 %>% unnest_tokens(word,quotes) %>% 
   anti_join(stop_words) %>% 
   inner_join(nrc) -> tempdf
+
+
+
+
+
+
+#check for updates and send e-mail if new customers
+checkforUpdates <- function() {
+  library(mailR)
+  
+  currentdata <- workiviaScraper()#get today's data
+  priordata <- read.xlsx2("WorkiviaSolutions.xlsx", 1, colClasses = c('Date', 'character', 'character'),stringsAsFactors=FALSE) #get historical data
+  combineddata <- rbind(currentdata, priordata) #combine dfs to append to file
+  
+  #check for new Company Names or more/less Solutions
+  if(identical(sort(unique(currentdata$companies)), sort(unique(priordata$companies)))
+     && nrow(currentdata) == nrow(priordata[priordata$pulldate == max(priordata$pulldate),])){
+    return("No update needed")
+  }
+  else {
+    #send e-mail - **user.name and passwd must be filled out**
+    send.mail(from = "",
+              to = c(""),
+              subject = paste0("Workivia Solutions Update: ", as.character(Sys.Date())),
+              body = "<html>There have been updates to the Company Solution list on <a href =\"https://www.workiva.com/customers?solution=All&industry=All&show_all=all\">Workivia.com.</a></html>",
+              html = TRUE,
+              smtp = list(host.name = "smtp.gmail.com", port = 465, user.name = "", passwd = "", ssl = TRUE),
+              attach.files = c("WorkiviaSolutions.xlsx"),
+              authenticate = TRUE,
+              send = TRUE)
+    workiviaWriter(combineddata)
+    return("File updated")
+  }
+  
+}
+
+#checkforUpdates()
