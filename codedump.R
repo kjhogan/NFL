@@ -43,3 +43,57 @@ real_GM_Seasons <- function(max_season = 2017) {
   all_seasons_stats <- lapply(seasos, real_GM_Scrape_Example) %>% do.call(rbind,.)
   return(all_seasons_stats)
 }
+
+
+
+
+pbp_Test <- function(gameId){
+  download.file("http://stats.nba.com/stats/playbyplayv2?EndPeriod=10&EndRange=55800&GameID=0021700206&RangeType=2&StartPeriod=1&StartRange=0", "test.json")
+  the.data.file<-fromJSON("test.json")
+  test <-the.data.file$resultSets$rowSet
+  test2 <- test[[1]]
+  test3 <- data.frame(test2)
+  coltest <- the.data.file$resultSets$headers
+  colnames(test3) <- coltest[[1]]
+  return (test3)
+}
+
+
+
+pbp_Test_SVU <- function(gameId){
+  #download.file("http://stats.nba.com/stats/playbyplayv2?EndPeriod=10&EndRange=55800&GameID=0021700206&RangeType=2&StartPeriod=1&StartRange=0", "test.json")
+  the.data.file<-fromJSON("test.json")
+  moments <- the.data.file$events$moments
+ 
+  return (moments)
+}
+
+
+get_Team_Data <- function(season = "2017-18"){
+  url <- paste0("http://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&LastNGames=0&LeagueID=00&Location=&MeasureType=Advanced&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Per100Plays&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=",season,"&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=")
+ # download.file(url,"teams.json")
+  team_data <- df_from_JSON("teams.json")
+  team_data <- team_data %>% mutate_at(vars(GP:PIE_RANK), funs(as.numeric))
+  return(team_data)
+}
+
+
+df_from_JSON = function(json_file) {
+  json = fromJSON(json_file)
+  row_set <- json$resultSets$rowSet
+  row_set_result <- row_set[[1]]
+  df <- data.frame(row_set_result, stringsAsFactors = FALSE)
+  columns <- json$resultSets$headers
+  colnames(df) <- columns[[1]]
+  return(df)
+}
+
+
+get_Team_Box <- function(teamId, type = "Advanced", season = "2017-18"){
+  
+  url <- paste0("http://stats.nba.com/stats/teamgamelogs?DateFrom=&DateTo=&GameSegment=&LastNGames=0&LeagueID=00&Location=&MeasureType=",type,"&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Totals&Period=0&PlusMinus=N&Rank=N&Season=",season,"&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&TeamID=",teamId,"&VsConference=&VsDivision=")
+  download.file(url,"box.json")
+  box_scores <- df_from_JSON("box.json")
+  box_scores <- box_scores %>% mutate_at(vars(MIN:PIE_RANK), funs(as.numeric)) 
+  return(box_scores)
+}
