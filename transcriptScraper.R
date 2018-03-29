@@ -47,3 +47,28 @@ transcriptScraper <- function() {
    passing_table <- passing_table %>% filter(Year == "Career")
    return(passing_table)
  }
+
+
+ get_NCAA_fumbles <- function(name){
+   fox_link <- paste0("https://www.foxsports.com/college-football/", gsub(" ", "-",name), "-player-game-log")
+   download.file(fox_link, "foxqb.html")
+   seasons <- read_html("foxqb.html") %>% html_nodes("select") %>% html_text() %>% regmatches(.,gregexpr(".{4}",.)) %>% .[[1]]
+   season_table <- read_html("foxqb.html") %>% html_nodes(".wisbb_standardTable") %>% html_table() %>% as.data.frame(stringsAsFactors = FALSE)
+   season_table$season <- seasons[1]
+   season_table$Player <- name
+   
+   if(length(seasons) > 1) {
+     seasons <- seasons[-1]
+     fox_link <- paste0(fox_link, "?season=", seasons[1])
+     download.file(fox_link, "foxqb.html")
+     next_season_table <- read_html("foxqb.html") %>% html_nodes(".wisbb_standardTable") %>% html_table() %>% as.data.frame(stringsAsFactors = FALSE)
+     next_season_table$season <- seasons[1]
+     next_season_table$Player <- name
+     season_table <- rbind(season_table, next_season_table)
+   }
+   
+   else{
+     return(season_table)
+   }
+   
+   return(season_table)
