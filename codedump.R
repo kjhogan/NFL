@@ -119,3 +119,66 @@ get_NFL_Fumbles <- function(link, player) {
   
   return(values)
 }
+
+    passing_table$Player <- name
+    passing_table <- passing_table %>% filter(Year == "Career")
+    passing_table <- passing_table %>% mutate_at(vars(No.:GS), as.numeric)
+    passing_table <- passing_table %>% mutate_at(vars(Cmp:AV), as.numeric)
+  }
+  
+  else {
+    passing_table <- data.frame()
+  }
+  return(passing_table)
+}
+
+
+get_NCAA_fumbles <- function(name){
+  Sys.sleep(2)
+  if(name == "C.J. Beathard"){
+    name <- "CJ Beathard"
+  }
+  if(name == "A.J. McCarron") {
+    name <- "AJ McCarron"
+  }
+  
+  if(name == "Geno Smith"){
+    name <- "Geno Smith 2"
+  }
+  
+  if(name == "Tyler Wilson"){
+    name <- "Tyler Wilson 3"
+  }
+  
+  if(name == "B.J. Daniels"){
+    name <- "BJ Daniels"
+  }
+  
+  if(name == "Robert Griffin"){
+    name <- "Robert Griffin iii"
+  }
+  
+  if(name == "B.J. Coleman"){
+    name <- "BJ Coleman"
+  }
+  
+  if(name == "T.J. Yates"){
+    name <- "TJ Yates"
+  }
+  
+  if(name == "J.P. Losman"){
+    name <- "JP Losman"
+  }
+  
+  
+  college_stats[1,18] <- "Player"
+  college_stats[1,17] <- "Season"
+  names(college_stats) <- college_stats[1,]
+  
+  college_stats %>% filter(Date != "Date") -> college_fumbles
+  
+  names(college_stats)[12] <- ("Rush.Att")
+  names(college_stats)[14] <- ("Rush.TD")
+  names(college_stats)[13] <- ("Rush.Yds")
+  gsub('%','',college_fumbles$Pct) -> college_fumbles$Pct
+  college_fumbles <- college_fumbles %>% mutate_at(vars(Comp:FumL), as.numeric)
