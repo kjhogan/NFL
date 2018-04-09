@@ -1,99 +1,121 @@
 
-real_GM_Scrape_Example <- function(season = 2003) {
-  #method for iterating pages for one season
-  #Defaults to 2003 but can enter any season as parameter
-  library(rvest)
-  library(tidyr)
+get_QB_Names <- function(){
   
-  #create link with season
-  link <- paste0("https://basketball.realgm.com/ncaa/stats/",season,"/Advanced_Stats/Qualified/All/Season/All/points/desc/")
-  
-  #read page in and extract html table
-  page <- read_html(link)
-  stats_table <- page %>% html_nodes(".tablesaw.compact") %>% html_table()%>% data.frame(stringsAsFactors = FALSE)
-  
-  #counter for while loop to add to link
-  page_counter <- 2
+  url <- paste0("https://www.pro-football-reference.com/play-index/draft-finder.cgi?request=1&year_min=1990&year_max=2017&draft_slot_min=1&draft_slot_max=500&pick_type=overall&pos%5B%5D=qb&conference=any&show=p&order_by=default")
 
-  #while the current page has a stats table
-  while(length(page %>% html_nodes(".tablesaw.compact")) == 1) {
-    
-    new_link <- paste0(link,as.character(page_counter))#increment link to next page
-    print(paste0("Getting stats from page",new_link))
+  linkbase <- read_html(url) %>% html_nodes("table tbody a") %>% html_attr('href')
+  linkname <- read_html(url) %>% html_nodes("table tbody a") %>% html_text()
+  link_logic <- linkbase %>% grepl("^/players/",.)
+  linkbase <- linkbase[link_logic]
+  linkname <- linkname[link_logic]
+  links <- paste0("https://pro-football-reference.com", linkbase)
+  data <- data.frame(linkname,links, stringsAsFactors = FALSE)
+  
+  return(data)
+}
 
-    page <- read_html(new_link)
-    temp_table <- page %>% html_nodes(".tablesaw.compact") %>% html_table()%>% data.frame(stringsAsFactors = FALSE)
-    stats_table <- rbind(stats_table, temp_table)
-    page_counter <- page_counter + 1
-    print(page_counter)
+get_NFL_Passing <- function(link, name) {
+  print(paste0("Getting NFL stats for: ", name, " at: ", link))
+  length <- read_html(link) %>% html_nodes("#passing") %>% length()
+  if(length == 1) {
+    passing_table <- read_html(link) %>% html_nodes("#passing") %>% html_table() %>% .[[1]] %>% as.data.frame()
+    if(length(names(passing_table)) > 30){
+      passing_table <- passing_table[,-23]
+    }
+    names(passing_table)[24] <- "Sk_Yds"
+    passing_table$Player <- name
+    passing_table <- passing_table %>% filter(Year == "Career")
+    passing_table <- passing_table %>% mutate_at(vars(No.:GS), as.numeric)
+    passing_table <- passing_table %>% mutate_at(vars(Cmp:AV), as.numeric)
   }
   
-  stats_table$season <- season
-  
-  return(stats_table)
-}
-
-#run this method to scrape all seasons or from 2003 to a season of your choice
-real_GM_Seasons <- function(max_season = 2017) {
-  if(max_season > 2017) {
-    return("Season cannot excede 2017")
+  else {
+    passing_table <- data.frame()
   }
-  seasons <- seq(2003,max_season,1)
+  return(passing_table)
+}
+
+
+get_NCAA_fumbles <- function(name){
   
-  all_seasons_stats <- lapply(seasos, real_GM_Scrape_Example) %>% do.call(rbind,.)
-  return(all_seasons_stats)
-}
-
-
-
-
-pbp_Test <- function(gameId){
-  download.file("http://stats.nba.com/stats/playbyplayv2?EndPeriod=10&EndRange=55800&GameID=0021700206&RangeType=2&StartPeriod=1&StartRange=0", "test.json")
-  the.data.file<-fromJSON("test.json")
-  test <-the.data.file$resultSets$rowSet
-  test2 <- test[[1]]
-  test3 <- data.frame(test2)
-  coltest <- the.data.file$resultSets$headers
-  colnames(test3) <- coltest[[1]]
-  return (test3)
-}
-
-
-
-pbp_Test_SVU <- function(gameId){
-  #download.file("http://stats.nba.com/stats/playbyplayv2?EndPeriod=10&EndRange=55800&GameID=0021700206&RangeType=2&StartPeriod=1&StartRange=0", "test.json")
-  the.data.file<-fromJSON("test.json")
-  moments <- the.data.file$events$moments
- 
-  return (moments)
-}
-
-
-get_Team_Data <- function(season = "2017-18"){
-  url <- paste0("http://stats.nba.com/stats/leaguedashteamstats?Conference=&DateFrom=&DateTo=&Division=&GameScope=&GameSegment=&LastNGames=0&LeagueID=00&Location=&MeasureType=Advanced&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Per100Plays&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=",season,"&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&VsConference=&VsDivision=")
- # download.file(url,"teams.json")
-  team_data <- df_from_JSON("teams.json")
-  team_data <- team_data %>% mutate_at(vars(GP:PIE_RANK), funs(as.numeric))
-  return(team_data)
-}
-
-
-df_from_JSON = function(json_file) {
-  json = fromJSON(json_file)
-  row_set <- json$resultSets$rowSet
-  row_set_result <- row_set[[1]]
-  df <- data.frame(row_set_result, stringsAsFactors = FALSE)
-  columns <- json$resultSets$headers
-  colnames(df) <- columns[[1]]
-  return(df)
-}
-
-
-get_Team_Box <- function(teamId, type = "Advanced", season = "2017-18"){
+  if(name == "C.J. Beathard"){
+    name <- "CJ Beathard"
+  }
+  if(name == "A.J. McCarron") {
+    name <- "AJ McCarron"
+  }
   
-  url <- paste0("http://stats.nba.com/stats/teamgamelogs?DateFrom=&DateTo=&GameSegment=&LastNGames=0&LeagueID=00&Location=&MeasureType=",type,"&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=Totals&Period=0&PlusMinus=N&Rank=N&Season=",season,"&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&TeamID=",teamId,"&VsConference=&VsDivision=")
-  download.file(url,"box.json")
-  box_scores <- df_from_JSON("box.json")
-  box_scores <- box_scores %>% mutate_at(vars(MIN:PIE_RANK), funs(as.numeric)) 
-  return(box_scores)
+  if(name == "Geno Smith"){
+    name <- "Geno Smith 2"
+  }
+  
+  if(name == "Tyler Wilson"){
+    name <- "Tyler Wilson 3"
+  }
+  
+  if(name == "B.J. Daniels"){
+    name <- "BJ Daniels"
+  }
+  
+  if(name == "Robert Griffin"){
+    name <- "Robert Griffin iii"
+  }
+  
+  if(name == "B.J.  Coleman"){
+    name <- "BJ Coleman"
+  }
+  
+  fox_link <- paste0("https://www.foxsports.com/college-football/", gsub(" ", "-",name), "-player-game-log")
+  print(paste0("Getting gamelog for: ", name))
+  seasons <- read_html(fox_link) %>% html_nodes("select") %>% html_text() %>% regmatches(.,gregexpr(".{4}",.)) %>% .[[1]]
+  season_table <- read_html(fox_link) %>% html_nodes(".wisbb_standardTable") %>% html_table() %>% as.data.frame(stringsAsFactors = FALSE)
+  season_table$season <- seasons[1]
+  season_table$Player <- name
+  
+  if(length(seasons) > 1) {
+    seasons <- seasons[-1]
+    fox_link <- paste0(fox_link, "?season=", seasons[1])
+    next_season_table <- read_html(fox_link) %>% html_nodes(".wisbb_standardTable") %>% html_table() %>% as.data.frame(stringsAsFactors = FALSE)
+    next_season_table$season <- seasons[1]
+    next_season_table$Player <- name
+    season_table <- rbind(season_table, next_season_table)
+  }
+  
+  else{
+    return(season_table)
+  }
+  
+  return(season_table)
+}
+
+get_Browser_Session <- function(){
+  library(RSelenium)
+  rD <- rsDriver()
+  remDr <- rD[["client"]]
+  return(remDr)
+}
+
+get_NFL_Fumbles <- function(link, player) {
+  print(paste0("Getting NFL stats for: ", player, " at: ", link))
+  
+  # remDriver <- get_Browser_Session()
+  # remDriver$navigate(link)
+  # page_source <-remDriver$getPageSource()
+  # defense <- read_xml(page_source[[1]]) %>% html_node(xpath='//*[@id="defense"]') %>% length()
+  defense <- read_html(link) %>% html_nodes(xpath = '//comment()') %>% html_text() %>% paste(collapse = '') %>% read_html() %>% html_node("#div_defense tfoot") %>% length()
+  if(defense > 0){
+    values <- read_html(link) %>% html_nodes(xpath = '//comment()') %>% html_text() %>% paste(collapse = '') %>% read_html() %>% html_node("#div_defense tfoot") %>% html_nodes(".right") %>% html_text() %>% .[1:17]
+    values <- c(values, player)
+    values <- data.frame(t(values), stringsAsFactors = FALSE)
+    column_names <- c('No', 'games', 'games_started', 'int', 'intyds', 'int_td', 'int_lng', 'intPD', 'FF', 'Fmb', 'FR', 'FmYds', 'TD', 'Sk', 'Tkl', 'Ast', 'Sfty','Player')
+    names(values) <- column_names
+    return(values)
+    values <- values %>% mutate_at(vars(Fmb:FmYds), as.numeric)
+    return(values)
+  }
+  else{
+    values <- data.frame()
+  }
+  
+  return(values)
 }
