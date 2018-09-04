@@ -54,3 +54,40 @@ event_df <- data.frame(event_num = c("1",
                                                               "EndOfPeriod",
                                                               "Unknown"), stringsAsFactors = FALSE)
 
+
+
+get_Season_Schedule <- function(season_type = "REG", season = 2018) {
+  
+  #create links
+  base_link <- "http://www.nfl.com/schedules"
+  link <- paste0(base_link, "/",season, "/", season_type)
+  weeks <- c(1:17)
+  weeks_links <- lapply(link,paste0,weeks) %>% unlist()
+
+  #run links through Parse NFL Week Schedule helper function
+  schedule_list <- lapply(weeks_links, parse_NFL_Week_Schedule)
+  schedule_df <- bind_rows(schedule_list)
+  return(schedule_df)
+}
+
+parse_NFL_Week_Schedule <- function(week_link) {
+  
+  #helper function to parse week page
+  download.file(week_link,"week.html")
+  page <- read_html("week.html")
+  
+  #extract elements from inside div tags
+  game_id <- page %>% html_nodes("div") %>% html_nodes(".schedules-list-content") %>% xml_attr("data-gameid")
+  away_teams <- page %>% html_nodes("div") %>% html_nodes(".schedules-list-content") %>% xml_attr("data-away-abbr")
+  home_teams <- page %>% html_nodes("div") %>% html_nodes(".schedules-list-content") %>% xml_attr("data-home-abbr")
+  gc_url <- page %>% html_nodes("div") %>% html_nodes(".schedules-list-content") %>% xml_attr("data-gc-url")
+  #create dataframe
+  week_df <- data.frame(game_id,away_teams,home_teams, gc_url, stringsAsFactors = FALSE)
+  
+  #add Season and Week
+  week_df$season <- week_link %>% str_split("/") %>% unlist() %>% .[5]
+  week_df$week <- week_link %>% str_split("/") %>% unlist() %>% .[6]
+  
+  print(paste0("Scraping from: ", week_link, "."))
+  return(week_df[-1,])
+}
